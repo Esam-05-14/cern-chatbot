@@ -23,7 +23,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "mcp>=1.0.0",
+    "mcp>=1.0.0,<2",
     "httpx>=0.27.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
@@ -46,10 +46,19 @@ cerngitlab-mcp = "cerngitlab_mcp.server:main"
 cerngitlab-mcp-stdio = "cerngitlab_mcp.server:main_stdio"
 cerngitlab-mcp-http = "cerngitlab_mcp.server:main_http"
 cerngitlab-cli = "cerngitlab_mcp.cli.main:main"
+cerngitlab-chat = "cerngitlab_chat.cli:main"
+
+[project.optional-dependencies]
+chat = [
+    "pydantic-ai>=2.0.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = ["cerngitlab_mcp", "cerngitlab_chat"]
 
 [dependency-groups]
 dev = [
@@ -60,6 +69,9 @@ dev = [
     "ruff>=0.4.0",
     "pre-commit>=4.0.0",
     "mypy>=1.13.0",
+]
+chat = [
+    "pydantic-ai>=2.0.0",
 ]
 
 [tool.pytest.ini_options]

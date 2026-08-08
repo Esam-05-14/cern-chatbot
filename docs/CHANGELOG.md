@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
 
+### Fixed
+- Pin `mcp` to `>=1.0.0,<2` so installs do not pull MCP Python SDK v2, which removed the low-level `@Server.list_tools()` / `@Server.call_tool()` decorators and broke stdio startup (`AttributeError: 'Server' object has no attribute 'list_tools'`).
+
+### Added
+- Optional **MCP-backed code chatbot** (`cerngitlab-chat`): pydantic-ai agent over OpenAI-compatible APIs (LiteLLM/OpenAI/Groq/vLLM) that calls this package’s CERN GitLab MCP tools via stdio (`MCPToolset` + `StdioTransport`). Install with `uv sync --group chat` or `pip install -e ".[chat]"`. See [docs/chatbot.md](chatbot.md). Designed so a future RAG `retrieve_code` tool can plug in without rewriting the CLI.
 
 ## [0.2.1] - 2026-08-02
 

@@ -13,6 +13,7 @@
 - **15 MCP tools** for searching, browsing, and analyzing CERN GitLab repositories
 - **Dual-mode operation** — stdio (single-user) and HTTP (multi-user) modes
 - **CLI tool** (`cerngitlab-cli`) for direct command-line usage
+- **Optional code chatbot** (`cerngitlab-chat`) — OpenAI-compatible agent that answers LHCb / CERN GitLab questions via these MCP tools ([docs/chatbot.md](docs/chatbot.md))
 - **Public access** — works without authentication for public repositories
 - **Multi-user HTTP mode** — CERN SSO + GitLab OAuth authentication for centralized deployments; GitLab enforces all access permissions natively
 - **HEP-focused** — dependency parsing for Python and C++ ecosystems, binary detection for `.root` files, issue search
@@ -43,6 +44,15 @@ git clone https://github.com/MohamedElashri/cerngitlab-mcp
 cd cerngitlab-mcp
 uv sync
 ```
+
+### Optional code chatbot
+
+```bash
+uv sync --group chat
+# or: pip install -e ".[chat]"
+```
+
+See [docs/chatbot.md](docs/chatbot.md) for LiteLLM/OpenAI setup and usage (`cerngitlab-chat`).
 
 ## Configuration
 
@@ -394,6 +404,19 @@ cerngitlab-cli inspect-project --project lhcb/allen
 ```
 
 All commands output JSON to stdout for easy piping and composition. See `cerngitlab-cli --help` for the full list of commands.
+
+## Code chatbot
+
+Optional MCP-backed Q&A CLI for LHCb / CERN GitLab questions (OpenAI-compatible APIs, including LiteLLM):
+
+```bash
+uv sync --group chat
+export OPENAI_API_KEY=...
+# optional: export OPENAI_BASE_URL=https://your-litellm-host/v1
+cerngitlab-chat -q "Where is ParticleAdder used in Moore?"
+```
+
+Details: [docs/chatbot.md](docs/chatbot.md).
 
 ## Skill File
 
