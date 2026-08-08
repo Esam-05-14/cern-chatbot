@@ -13,7 +13,7 @@
 - **15 MCP tools** for searching, browsing, and analyzing CERN GitLab repositories
 - **Dual-mode operation** — stdio (single-user) and HTTP (multi-user) modes
 - **CLI tool** (`cerngitlab-cli`) for direct command-line usage
-- **Optional code chatbot** (`cerngitlab-chat`) — OpenAI-compatible agent that answers LHCb / CERN GitLab questions via these MCP tools ([docs/chatbot.md](docs/chatbot.md))
+- **Companion code chatbot** (`cerngitlab-chat`) — a **separate** Q&A app that talks to this MCP server over stdio (not part of the MCP protocol surface itself). Bring your own LLM API key (OpenAI or OpenRouter). See [docs/chatbot.md](docs/chatbot.md)
 - **Public access** — works without authentication for public repositories
 - **Multi-user HTTP mode** — CERN SSO + GitLab OAuth authentication for centralized deployments; GitLab enforces all access permissions natively
 - **HEP-focused** — dependency parsing for Python and C++ ecosystems, binary detection for `.root` files, issue search
@@ -45,14 +45,27 @@ cd cerngitlab-mcp
 uv sync
 ```
 
-### Optional code chatbot
+### Companion code chatbot (separate from the MCP server)
+
+`cerngitlab-chat` is an optional, separate CLI/UI that **uses** this package’s CERN GitLab MCP server as its tool backend. Install the chat extras, then set an LLM API key for **OpenAI** or **OpenRouter**:
 
 ```bash
 uv sync --group chat
 # or: pip install -e ".[chat]"
 ```
 
-See [docs/chatbot.md](docs/chatbot.md) for LiteLLM/OpenAI setup and usage (`cerngitlab-chat`).
+```bash
+# OpenAI
+export OPENAI_API_KEY=sk-...
+export CERNGITLAB_CHAT_MODEL=gpt-4.1-mini
+
+# — or OpenRouter —
+export OPENAI_API_KEY=sk-or-v1-...
+export OPENAI_BASE_URL=https://openrouter.ai/api/v1
+export CERNGITLAB_CHAT_MODEL=openai/gpt-4.1-mini
+```
+
+Also set `CERNGITLAB_TOKEN` if you need private/internal GitLab access. Full setup: [docs/chatbot.md](docs/chatbot.md).
 
 ## Configuration
 
@@ -405,22 +418,35 @@ cerngitlab-cli inspect-project --project lhcb/allen
 
 All commands output JSON to stdout for easy piping and composition. See `cerngitlab-cli --help` for the full list of commands.
 
-## Code chatbot
+## Companion code chatbot
 
-Optional MCP-backed Q&A CLI for LHCb / CERN GitLab questions (OpenAI-compatible APIs, including LiteLLM):
+`cerngitlab-chat` is a **separate** LHCb / CERN GitLab Q&A application. It does not replace the MCP server: it **spawns this repo’s MCP tools over stdio** and sends questions to an OpenAI-compatible chat model.
+
+You provide the LLM credentials yourself — **OpenAI** or **OpenRouter** (or any other OpenAI-compatible endpoint via `OPENAI_BASE_URL`):
 
 ```bash
 uv sync --group chat
-# optional RAG:
+# optional RAG index + retrieve_code:
 uv sync --group rag
-export OPENAI_API_KEY=...
-# optional: export OPENAI_BASE_URL=https://your-litellm-host/v1
+
+# OpenAI
+export OPENAI_API_KEY=sk-...
+export CERNGITLAB_CHAT_MODEL=gpt-4.1-mini
+
+# OpenRouter (same OPENAI_* variable names)
+# export OPENAI_API_KEY=sk-or-v1-...
+# export OPENAI_BASE_URL=https://openrouter.ai/api/v1
+# export CERNGITLAB_CHAT_MODEL=openai/gpt-4.1-mini
+
+# GitLab access for the MCP child process
+export CERNGITLAB_TOKEN=glpat-...
+
 cerngitlab-chat -q "Where is ParticleAdder used in Moore?"
 cerngitlab-chat --ui   # http://127.0.0.1:7860/
 # RAG: cerngitlab-chat-index --clone && CERNGITLAB_CHAT_RAG=1 cerngitlab-chat --ui
 ```
 
-Details: [docs/chatbot.md](docs/chatbot.md).
+Pin a tool-capable model (avoid `openrouter/free`). Details: [docs/chatbot.md](docs/chatbot.md).
 
 ## Skill File
 
