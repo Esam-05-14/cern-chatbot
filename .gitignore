@@ -8,6 +8,18 @@ wheels/
 
 # Virtual environments
 .venv
+.venv-full
+
+# Local secrets / environment
+.env
+.env.local
+
+# Chatbot / RAG local cache
+.cache/
+
+# Local live-eval outputs
+eval_*.jsonl
+eval_results.jsonl
 
 # files
 plan*
@@ -18,3 +30,4 @@ plan*
 .mistral
 .qwen
 .settings.json
+.cursor/

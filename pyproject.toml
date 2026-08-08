@@ -1,6 +1,6 @@
 [project]
 name = "cerngitlab-mcp"
-version = "0.2.1"
+version = "0.3.0"
 description = "MCP server for CERN GitLab - code discovery, documentation access, and usage examples for HEP projects"
 readme = "README.md"
 authors = [
@@ -47,10 +47,20 @@ cerngitlab-mcp-stdio = "cerngitlab_mcp.server:main_stdio"
 cerngitlab-mcp-http = "cerngitlab_mcp.server:main_http"
 cerngitlab-cli = "cerngitlab_mcp.cli.main:main"
 cerngitlab-chat = "cerngitlab_chat.cli:main"
+cerngitlab-chat-index = "cerngitlab_chat.rag.index_cli:main"
 
 [project.optional-dependencies]
 chat = [
     "pydantic-ai>=2.0.0",
+]
+rag = [
+    "pydantic-ai>=2.0.0",
+    "openai>=1.0.0",
+    "faiss-cpu>=1.8.0",
+    "numpy>=1.26.0",
+    "tree-sitter>=0.22.0",
+    "tree-sitter-python>=0.23.0",
+    "tree-sitter-cpp>=0.23.0",
 ]
 
 [build-system]
@@ -72,6 +82,15 @@ dev = [
 ]
 chat = [
     "pydantic-ai>=2.0.0",
+]
+rag = [
+    "pydantic-ai>=2.0.0",
+    "openai>=1.0.0",
+    "faiss-cpu>=1.8.0",
+    "numpy>=1.26.0",
+    "tree-sitter>=0.22.0",
+    "tree-sitter-python>=0.23.0",
+    "tree-sitter-cpp>=0.23.0",
 ]
 
 [tool.pytest.ini_options]

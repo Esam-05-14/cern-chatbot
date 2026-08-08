@@ -20,17 +20,20 @@ from cerngitlab_chat.prompts import SYSTEM_PROMPT
 def chat_settings(tmp_path, monkeypatch: pytest.MonkeyPatch) -> ChatSettings:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("CERNGITLAB_CHAT_MODEL", "test-model")
+    monkeypatch.setenv("CERNGITLAB_CHAT_RAG", "0")
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
     # Point MCP command at a fake executable path so resolve does not need PATH.
     fake_mcp = tmp_path / "cerngitlab-mcp-stdio"
     fake_mcp.write_text("", encoding="utf-8")
     monkeypatch.setenv("CERNGITLAB_CHAT_MCP_COMMAND", str(fake_mcp))
-    return ChatSettings()
+    # Ignore project .env so local RAG/UI settings cannot hang unit tests.
+    return ChatSettings(_env_file=None)
 
 
 def test_require_api_key_missing(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    settings = ChatSettings(openai_api_key="")
+    # Ignore process env and project .env so this asserts the empty-key path.
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    settings = ChatSettings(_env_file=None)
     with pytest.raises(ValueError, match="OPENAI_API_KEY"):
         settings.require_api_key()
 
@@ -83,7 +86,8 @@ def test_mcp_auto_mode_binary_gets_stdio_flag(
     fake_mcp.write_text("", encoding="utf-8")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("CERNGITLAB_CHAT_MCP_COMMAND", str(fake_mcp))
-    settings = ChatSettings()
+    monkeypatch.setenv("CERNGITLAB_CHAT_RAG", "0")
+    settings = ChatSettings(_env_file=None)
 
     fake_toolset = MagicMock()
     fake_transport = MagicMock()
@@ -153,5 +157,143 @@ def test_build_model_passes_base_url(chat_settings: ChatSettings) -> None:
 
 def test_system_prompt_mentions_stack_and_tools() -> None:
     assert "Moore" in SYSTEM_PROMPT
-    assert "search_lhcb_stack" in SYSTEM_PROMPT
+    assert "get_file_content" in SYSTEM_PROMPT
+    assert "lhcb/Rec" in SYSTEM_PROMPT
+    assert "do not invent" in SYSTEM_PROMPT.lower() or "Do NOT invent" in SYSTEM_PROMPT
     assert "retrieve_code" in SYSTEM_PROMPT
+    assert "ParticleAdder" not in SYSTEM_PROMPT
+
+
+def test_warn_if_weak_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    monkeypatch.setenv("CERNGITLAB_CHAT_MODEL", "openrouter/free")
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    weak = ChatSettings(_env_file=None)
+    assert weak.warn_if_weak_model() is not None
+
+    monkeypatch.setenv("CERNGITLAB_CHAT_MODEL", "gpt-4.1-mini")
+    strong = ChatSettings(_env_file=None)
+    assert strong.warn_if_weak_model() is None
+
+
+def test_extract_tool_logs_from_parts() -> None:
+    from types import SimpleNamespace
+
+    from cerngitlab_chat.tool_log import extract_tool_logs
+
+    messages = [
+        SimpleNamespace(
+            parts=[
+                SimpleNamespace(
+                    part_kind="tool-call",
+                    tool_name="search_code",
+                    args={"search_term": "DecayTreeFitter", "project": "lhcb/DaVinci"},
+                    tool_call_id="1",
+                ),
+                SimpleNamespace(
+                    part_kind="tool-return",
+                    tool_name="search_code",
+                    content={"total_results": 2},
+                    tool_call_id="1",
+                ),
+            ]
+        )
+    ]
+    logs = extract_tool_logs(messages)
+    assert len(logs) == 2
+    assert logs[0].kind == "call"
+    assert logs[0].tool == "search_code"
+    assert "DecayTreeFitter" in logs[0].detail
+    assert logs[1].kind == "result"
+
+
+@pytest.mark.asyncio
+async def test_chat_session_ask_and_clear(chat_settings: ChatSettings) -> None:
+    from unittest.mock import AsyncMock
+
+    from cerngitlab_chat.session import ChatSession
+
+    fake_agent = MagicMock()
+    fake_agent.__aenter__ = AsyncMock(return_value=fake_agent)
+    fake_agent.__aexit__ = AsyncMock(return_value=None)
+    first = MagicMock()
+    first.output = "answer-1"
+    first.all_messages.return_value = ["m1"]
+    first.new_messages.return_value = []
+    second = MagicMock()
+    second.output = "answer-2"
+    second.all_messages.return_value = ["m1", "m2"]
+    second.new_messages.return_value = []
+    fake_agent.run = AsyncMock(side_effect=[first, second])
+
+    with patch("cerngitlab_chat.session.create_agent", return_value=fake_agent):
+        session = ChatSession.from_settings(chat_settings)
+        async with session:
+            turn1 = await session.ask("q1")
+            assert turn1.reply == "answer-1"
+            turn2 = await session.ask("q2")
+            assert turn2.reply == "answer-2"
+            assert fake_agent.run.await_count == 2
+            # Second call should pass prior history.
+            assert fake_agent.run.await_args_list[1].kwargs["message_history"] == ["m1"]
+            session.clear_history()
+            assert session._history is None
+
+
+def test_ui_static_and_chat_api(chat_settings: ChatSettings) -> None:
+    from unittest.mock import AsyncMock
+
+    from fastapi.testclient import TestClient
+
+    from cerngitlab_chat.session import ChatTurn
+    from cerngitlab_chat.tool_log import ToolLogEntry
+    from cerngitlab_chat.ui.app import create_ui_app
+
+    fake_session = MagicMock()
+    fake_session.__aenter__ = AsyncMock(return_value=fake_session)
+    fake_session.__aexit__ = AsyncMock(return_value=None)
+    fake_session.ask = AsyncMock(
+        return_value=ChatTurn(
+            reply="Moore hosts HLT2 lines.",
+            tool_logs=[
+                ToolLogEntry(
+                    kind="call",
+                    tool="search_projects",
+                    detail='{"query": "Moore"}',
+                    tool_call_id="t1",
+                )
+            ],
+        )
+    )
+    fake_session.clear_history = MagicMock()
+
+    with patch(
+        "cerngitlab_chat.ui.app.ChatSession.from_settings", return_value=fake_session
+    ):
+        app = create_ui_app(chat_settings)
+        with TestClient(app) as client:
+            home = client.get("/")
+            assert home.status_code == 200
+            assert b"cerngitlab-chat" in home.content
+            assert b"MCP tools required" in home.content
+
+            css = client.get("/static/styles.css")
+            assert css.status_code == 200
+            assert b"tool-log" in css.content
+
+            status = client.get("/api/status")
+            assert status.status_code == 200
+            assert status.json()["ready"] is True
+            assert status.json()["model"] == "test-model"
+
+            chat = client.post("/api/chat", json={"message": "What is Moore?"})
+            assert chat.status_code == 200
+            body = chat.json()
+            assert "Moore" in body["reply"]
+            assert body["used_tools"] is True
+            assert body["tool_logs"][0]["tool"] == "search_projects"
+            fake_session.ask.assert_awaited_once()
+
+            cleared = client.post("/api/clear")
+            assert cleared.status_code == 200
+            fake_session.clear_history.assert_called_once()

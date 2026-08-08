@@ -4,11 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-08
+
+Alpha release: optional MCP-backed LHCb code chatbot + RAG MVP. Not a production
+guarantee for expert physics Q&A — pin a tool-capable model and treat answers as
+evidence-cited assistance.
+
 ### Fixed
 - Pin `mcp` to `>=1.0.0,<2` so installs do not pull MCP Python SDK v2, which removed the low-level `@Server.list_tools()` / `@Server.call_tool()` decorators and broke stdio startup (`AttributeError: 'Server' object has no attribute 'list_tools'`).
 
 ### Added
-- Optional **MCP-backed code chatbot** (`cerngitlab-chat`): pydantic-ai agent over OpenAI-compatible APIs (LiteLLM/OpenAI/Groq/vLLM) that calls this package’s CERN GitLab MCP tools via stdio (`MCPToolset` + `StdioTransport`). Install with `uv sync --group chat` or `pip install -e ".[chat]"`. See [docs/chatbot.md](chatbot.md). Designed so a future RAG `retrieve_code` tool can plug in without rewriting the CLI.
+- Optional **MCP-backed code chatbot** (`cerngitlab-chat`): pydantic-ai agent over OpenAI-compatible APIs (LiteLLM/OpenAI/Groq/vLLM) that calls this package's CERN GitLab MCP tools via stdio (`MCPToolset` + `StdioTransport`). Install with `uv sync --group chat` or `pip install -e ".[chat]"`. See [docs/chatbot.md](chatbot.md).
+- Local **web chat UI**: `cerngitlab-chat --ui` (default `http://127.0.0.1:7860/`) with per-turn MCP tool call/result logs.
+- **RAG Option 2 MVP**: `cerngitlab-chat-index` builds a local FAISS index; `CERNGITLAB_CHAT_RAG=1` registers `retrieve_code` beside MCP. See [docs/eval.md](eval.md).
+- Evidence-first system prompt (no primed domain answers), project-path helpers, multi-topic eval harness with heuristic scoring (`--resume` / `--ids`, fail-fast on free-tier daily quota and 402 credit errors).
+- Warning when `CERNGITLAB_CHAT_MODEL` is a weak free/router id such as `openrouter/free`.
+
+### Changed
+- Prefer `.venv-full` when auto-resolving the MCP child executable on Windows.
+- Chat session does not inject routing hints into user messages; hard provider quota errors are not retried.
 
 ## [0.2.1] - 2026-08-02
 

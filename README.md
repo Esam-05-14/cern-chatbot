@@ -411,9 +411,13 @@ Optional MCP-backed Q&A CLI for LHCb / CERN GitLab questions (OpenAI-compatible 
 
 ```bash
 uv sync --group chat
+# optional RAG:
+uv sync --group rag
 export OPENAI_API_KEY=...
 # optional: export OPENAI_BASE_URL=https://your-litellm-host/v1
 cerngitlab-chat -q "Where is ParticleAdder used in Moore?"
+cerngitlab-chat --ui   # http://127.0.0.1:7860/
+# RAG: cerngitlab-chat-index --clone && CERNGITLAB_CHAT_RAG=1 cerngitlab-chat --ui
 ```
 
 Details: [docs/chatbot.md](docs/chatbot.md).

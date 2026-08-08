@@ -1,9 +1,8 @@
-"""Pluggable tool backends for the chatbot (MCP now; RAG later).
+"""Pluggable tool backends for the chatbot (MCP + optional RAG).
 
 Phase 1 wires CERN GitLab MCP over stdio.
-Phase 2 can register additional :class:`~pydantic_ai.toolsets.AbstractToolset`
-instances (for example a ``retrieve_code`` FunctionToolset over FAISS) without
-changing the CLI entry point.
+Phase 2 can register :class:`~cerngitlab_chat.rag.backend.RagToolBackend`
+(``retrieve_code`` over FAISS) via :class:`CompositeToolBackend`.
 """
 
 from __future__ import annotations
@@ -42,8 +41,6 @@ class McpStdioBackend:
         from cerngitlab_chat.config import mcp_child_env
 
         command = self.settings.resolve_mcp_command()
-        # Prefer the dedicated stdio entry point when the resolved command is
-        # the auto-mode ``cerngitlab-mcp`` binary so HTTP mode is not selected.
         args: list[str] = []
         if Path(command).stem == "cerngitlab-mcp":
             args = ["--mode", "stdio"]
@@ -65,13 +62,13 @@ class McpStdioBackend:
 
 @dataclass
 class CompositeToolBackend:
-    """Combine multiple backends (MCP + future RAG) into one toolset list."""
+    """Combine multiple backends (MCP + RAG) into one toolset list."""
 
     backends: list[ToolBackend] = field(default_factory=list)
     name: str = "composite"
 
     def add(self, backend: ToolBackend) -> None:
-        """Register an additional tool backend (e.g. future RAG)."""
+        """Register an additional tool backend (e.g. RAG)."""
         self.backends.append(backend)
 
     def build_toolsets(self) -> Sequence[AbstractToolset]:
@@ -82,12 +79,29 @@ class CompositeToolBackend:
 
 
 def default_tool_backend(settings: ChatSettings | None = None) -> CompositeToolBackend:
-    """Build the default Phase-1 backend stack (MCP only).
+    """Build the default backend stack (MCP, plus RAG when enabled and indexed).
 
-    Phase 2: call ``backend.add(RagToolBackend(...))`` before creating the agent,
-    or pass a custom :class:`CompositeToolBackend` into :func:`create_agent`.
+    Set ``CERNGITLAB_CHAT_RAG=1`` and build an index with ``cerngitlab-chat-index``.
     """
     from cerngitlab_chat.config import get_chat_settings
 
     settings = settings or get_chat_settings()
-    return CompositeToolBackend(backends=[McpStdioBackend(settings=settings)])
+    composite = CompositeToolBackend(backends=[McpStdioBackend(settings=settings)])
+
+    if settings.rag_enabled:
+        try:
+            from cerngitlab_chat.rag.backend import RagToolBackend
+        except ImportError as exc:  # pragma: no cover - missing optional deps
+            raise ImportError(
+                "CERNGITLAB_CHAT_RAG is enabled but RAG dependencies are missing. "
+                "Install with ``uv sync --group rag`` or ``pip install -e '.[rag]'``."
+            ) from exc
+        rag = RagToolBackend(settings=settings)
+        if not rag.available():
+            raise FileNotFoundError(
+                f"CERNGITLAB_CHAT_RAG is enabled but no index was found under "
+                f"{settings.resolve_rag_index_dir()}. Run ``cerngitlab-chat-index`` first."
+            )
+        composite.add(rag)
+
+    return composite

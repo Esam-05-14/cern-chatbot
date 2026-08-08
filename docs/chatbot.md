@@ -1,92 +1,112 @@
 # Code chatbot (`cerngitlab-chat`)
 
-Optional **MCP-only** LHCb / CERN GitLab code Q&A CLI (Team A Option 1).  
-It drives this package’s MCP tools from a pydantic-ai agent over an OpenAI-compatible API. RAG is not included yet; the agent is shaped so a future `retrieve_code` tool can plug in (Option 2).
+Optional **MCP-backed** LHCb / CERN GitLab code Q&A CLI + local web UI (Team A Option 1),
+with optional **FAISS RAG** (`retrieve_code`) for hybrid answering (Option 2).
 
 ## Install
 
-From the repo root:
-
 ```bash
 uv sync --group chat
+# RAG indexer + retrieve_code:
+uv sync --group rag
 ```
 
-Or with pip:
+Or with pip: `pip install -e ".[chat]"` / `pip install -e ".[rag]"`.
 
-```bash
-pip install -e ".[chat]"
+On Windows, stop Cursor’s MCP server before `uv sync` if it locks `cerngitlab-mcp.exe`.
+Prefer the full venv to avoid the locked default `.venv` and reduce security-prompt noise:
+
+```powershell
+.\.venv-full\Scripts\Activate.ps1
+uv sync --group chat --group rag --active
 ```
+
+Pin the MCP child if needed: `CERNGITLAB_CHAT_MCP_COMMAND` →
+`.venv-full\Scripts\cerngitlab-mcp.exe`.
 
 ## Configuration
 
 | Variable | Required | Description |
 |---|---|---|
-| `OPENAI_API_KEY` | yes | API key for OpenAI, LiteLLM, Groq, vLLM, etc. |
-| `OPENAI_BASE_URL` | no | OpenAI-compatible base URL (e.g. LiteLLM gateway) |
-| `CERNGITLAB_CHAT_MODEL` | no | Model id (default `gpt-4.1-mini`) |
+| `OPENAI_API_KEY` | yes | API key for an OpenAI-compatible endpoint |
+| `OPENAI_BASE_URL` | no | OpenAI-compatible base URL (LiteLLM, OpenRouter, …) |
+| `CERNGITLAB_CHAT_MODEL` | no | Chat model id — **prefer a tool-calling model** (default `gpt-4.1-mini`) |
+| `CERNGITLAB_CHAT_EMBED_MODEL` | no | Embedding model for indexing (default `text-embedding-3-small`) |
 | `CERNGITLAB_CHAT_MAX_TOOL_ROUNDS` | no | Max model rounds per question (default `5`) |
-| `CERNGITLAB_CHAT_MCP_COMMAND` | no | Override MCP executable (default: `cerngitlab-mcp-stdio` on PATH) |
+| `CERNGITLAB_CHAT_MCP_COMMAND` | no | MCP executable override (auto-detects venv Scripts) |
+| `CERNGITLAB_CHAT_MCP_RETRIES` | no | Extra retries on timeout/rate-limit errors (default `1`) |
+| `CERNGITLAB_CHAT_RAG` | no | `1`/`true` to enable `retrieve_code` when an index exists |
+| `CERNGITLAB_CHAT_RAG_INDEX_DIR` | no | FAISS dir (default `.cache/cerngitlab-chat/faiss`) |
 | `CERNGITLAB_TOKEN` | recommended | GitLab token for code search / private projects |
-| Other `CERNGITLAB_*` | no | Passed through to the MCP subprocess |
 
-Values can live in a project `.env` file (same pattern as the MCP server).
+### Model tip
 
-### LiteLLM example
+Pin a tool-capable model. **Never** use `openrouter/free` for demos or evals (rate
+limits + unreliable tool calling). Recommended: `gpt-4.1-mini` (OpenAI) or
+`openai/gpt-4.1-mini` (OpenRouter). See [eval.md](eval.md).
+
+### LiteLLM / OpenRouter example
 
 ```bash
-export OPENAI_API_KEY=sk-...
-export OPENAI_BASE_URL=https://your-litellm-host/v1
-export CERNGITLAB_CHAT_MODEL=gpt-4.1-mini
+export OPENAI_API_KEY=sk-or-v1-...
+export OPENAI_BASE_URL=https://openrouter.ai/api/v1
+export CERNGITLAB_CHAT_MODEL=gpt-4.1-mini   # or another tool-capable id
 export CERNGITLAB_TOKEN=glpat-...
 ```
 
 ## Usage
 
-Interactive REPL:
-
 ```bash
 cerngitlab-chat
+cerngitlab-chat -q "Where is ParticleAdder used in Moore?"
+cerngitlab-chat --ui   # http://127.0.0.1:7860/
 ```
 
-One-shot:
+REPL commands: `/quit`, `/exit`, `/clear`.
+
+### RAG index
 
 ```bash
-cerngitlab-chat -q "Where is ParticleAdder used in Moore?"
+# Smoke: one project, capped files/chunks
+cerngitlab-chat-index --project lhcb/DaVinci --clone --max-files 40 --max-chunks 200
+
+# Full default stack set (Moore, Allen, Gaudi, Rec, LHCb, Gauss, DaVinci)
+cerngitlab-chat-index --clone
 ```
 
-Commands inside the REPL: `/quit` or `/exit`.
+Then:
 
-## Smoke test
+```bash
+export CERNGITLAB_CHAT_RAG=1
+cerngitlab-chat --ui
+```
 
-1. Sync the `chat` dependency group and ensure `cerngitlab-mcp-stdio` is on PATH.
-2. Set `OPENAI_API_KEY` (and optionally `OPENAI_BASE_URL` + `CERNGITLAB_TOKEN`).
-3. Run:
+The agent should call `retrieve_code` first, then MCP to verify. The UI tool log shows both.
 
-   ```bash
-   cerngitlab-chat -q "What is the LHCb software stack project for HLT2?"
-   ```
+### Eval harness
 
-4. Confirm the answer cites GitLab evidence (project/path). On failure, check MCP timeouts and `CERNGITLAB_RATE_LIMIT_PER_MINUTE`.
+Multi-topic questions (Rec, Moore, DaVinci, Allen, Gaudi, Gauss, Detector, stack/tooling)
+with heuristic scoring. The system prompt is evidence-only (no primed physics answers):
+use tools, cite files, and say you do not know when under-determined.
+
+```bash
+python -m cerngitlab_chat.eval.run_eval --list
+python -m cerngitlab_chat.eval.run_eval --limit 5 --out eval_results.jsonl
+python -m cerngitlab_chat.eval.run_eval --topic analysis --out eval_analysis.jsonl
+```
+
+MCP vs MCP+RAG comparison and scoring details: [eval.md](eval.md).
 
 ## Architecture
 
 ```text
-User CLI → cerngitlab-chat Agent → OpenAI-compatible LLM
-                 ↓
-         MCPToolset(StdioTransport) → cerngitlab-mcp → gitlab.cern.ch
+User (CLI or Web UI) → cerngitlab-chat Agent → OpenAI-compatible LLM
+                         ↓                ↓
+              retrieve_code (FAISS)   MCPToolset → gitlab.cern.ch
 ```
 
 Extension point: [`cerngitlab_chat.backends`](../src/cerngitlab_chat/backends.py)
 
-- `ToolBackend` — protocol for anything that returns pydantic-ai toolsets
-- `McpStdioBackend` — Phase 1 (live GitLab MCP via `MCPToolset` + `StdioTransport`)
-- `CompositeToolBackend.add(...)` — register extra backends before `create_agent`
-
-## Roadmap: RAG (Option 2)
-
-Not implemented yet. Intended steps:
-
-1. Indexer CLI: LHCb stack projects → AST-aware chunks → embeddings → local FAISS/Chroma.
-2. New backend that exposes `retrieve_code(query, top_k)` via a FunctionToolset.
-3. `default_tool_backend()` (or CLI) registers MCP **and** RAG; prompt already mentions using RAG for speed and MCP for fresh file-accurate lookups.
-4. Optional eval harness (Q&A + LLM judge) later.
+- `McpStdioBackend` — live GitLab MCP
+- `RagToolBackend` — local FAISS `retrieve_code` when `CERNGITLAB_CHAT_RAG=1`
+- `CompositeToolBackend` — combines both

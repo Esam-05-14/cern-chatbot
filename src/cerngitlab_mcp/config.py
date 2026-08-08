@@ -1,6 +1,6 @@
 """Configuration management for the CERN GitLab MCP server."""
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
 
@@ -9,9 +9,17 @@ class Settings(BaseSettings):
 
     Environment variables are prefixed with CERNGITLAB_ by default.
     Example: CERNGITLAB_GITLAB_URL=https://gitlab.cern.ch
+
+    A local ``.env`` file (if present) is also loaded; real environment
+    variables take precedence over values from the file.
     """
 
-    model_config = {"env_prefix": "CERNGITLAB_"}
+    model_config = SettingsConfigDict(
+        env_prefix="CERNGITLAB_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # GitLab settings
     gitlab_url: str = Field(

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>cerngitlab-chat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Public+Sans:wght@400;500;600&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="atmosphere" aria-hidden="true"></div>
+  <main class="shell">
+    <header class="brand">
+      <p class="brand-mark">cerngitlab-chat</p>
+      <p class="brand-line">Ask the LHCb stack through CERN GitLab MCP tools.</p>
+      <div class="meta">
+        <span id="model-label" class="chip">model…</span>
+        <span id="status-label" class="chip chip-muted">connecting</span>
+        <span class="chip chip-muted">MCP tools required · RAG when indexed</span>
+        <button type="button" id="clear-btn" class="text-btn">Clear chat</button>
+      </div>
+    </header>
+
+    <section class="transcript" id="transcript" aria-live="polite">
+      <div class="empty" id="empty-state">
+        Try questions like “Where is ParticleAdder used in Moore?” or “What projects make up the LHCb software stack?”
+      </div>
+    </section>
+
+    <form class="composer" id="chat-form">
+      <label class="sr-only" for="message">Your question</label>
+      <textarea
+        id="message"
+        name="message"
+        rows="2"
+        placeholder="Ask about Moore, Allen, Gaudi, Rec…"
+        required
+      ></textarea>
+      <button type="submit" id="send-btn">Ask</button>
+    </form>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
